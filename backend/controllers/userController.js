@@ -126,7 +126,7 @@ class UserController {
         
         await confirmEmailVerification(existingUser);
 
-        return res.status(500).json({
+        return res.status(201).json({
             staus:"Success",
             message:"Email Verified Successfully!"
         })
@@ -139,6 +139,29 @@ class UserController {
     }
   }
   //Login
+  static userLogin = async (req, res)=>{
+
+    const {email , password} = req.body;
+    if(!email || !password){
+        return res.staus(404).json({
+            status:"Failed",
+            message:"All fields are required"
+        })
+    }
+
+    const user = await userModel.findOne({email})
+    if(!user){
+        return res.status(404).json({
+            status:"Failed",
+            message:"Invalid username or password"
+        })
+    }
+
+    if(user){
+       
+    }
+
+  }
 
   //Get New access token or Refresh token
 
