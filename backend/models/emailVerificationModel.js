@@ -8,6 +8,6 @@ createdAt :{ type:Date, default: Date.now(), exprires:'5m' }
 });
 
 //model
-const EmailVarificationModel = mongoose.model('EmailVarification', EmailVerificationSchema);
+const EmailVerificationModel = mongoose.model('EmailVarification', EmailVerificationSchema);
 
-export default EmailVarificationModel;
+export default EmailVerificationModel;

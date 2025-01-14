@@ -1,7 +1,8 @@
-import userModel from '../models/userModel.js'
 import bcrypt from 'bcrypt'
-import sendEmailVarificationOTP from '../utils/sendEmailVarificationOTP.js'
-import EmailVarificationModel from '../models/emailVerificationModel.js';
+import userModel from '../models/userModel.js'
+import EmailVerificationModel from '../models/emailVerificationModel.js';
+import sendEmailVerificationOTP from '../utils/sendEmailVerificationOTP.js'
+import confirmEmailVerification from '../utils/confirmEmailVerification.js';
 class UserController {
 
     // Registration
@@ -11,7 +12,7 @@ class UserController {
         
         //All fields required
         if(!firstName || !lastName || !email ||!password || !password_confirmation){
-            res.status(400).json({
+            return res.status(400).json({
                 status:"Failed",
                 message:"All fields are required"
             })
@@ -19,7 +20,7 @@ class UserController {
 
         //Password and Password confirmation match
         if(password !== password_confirmation){
-            res.status(400).json({
+            return res.status(400).json({
                 status:"Failed",
                 message:"Confirmation password does not match"
             })
@@ -28,7 +29,7 @@ class UserController {
         //Existing User
         const existingUser = await userModel.findOne({email})
         if(existingUser){
-            res.status(400).json({
+            return res.status(400).json({
                 status:"Failed",
                 message:"User already exist"
             })
@@ -43,28 +44,29 @@ class UserController {
             firstName, lastName, email, password:hashPassword
         }).save();
 
-        sendEmailVarificationOTP(req, newUser);
+        sendEmailVerificationOTP(req, newUser);
 
-        res.status(201).json({
+        return res.status(201).json({
             status:"Success",
             message:"New user registered successfully",
             user:{ id :newUser._id, email: newUser.email }
         });
 
     } catch (error) {
-        res.status(500).json({
+        return res.status(500).json({
             status: "Failed",
             message: "Unable to register please try again"
         });
     }
   }
-  // Email Varification
+  // Email verification
   static VerifyEmail = async (req, res)=>{
     try {
         
         const {email, otp } = req.body;
+
         if(!email || !otp){
-            res.status(404).json({
+            return res.status(404).json({
                 status:"Failed",
                 message:"All fields are required"
             })
@@ -74,54 +76,63 @@ class UserController {
         const existingUser = await userModel.findOne({email});
         if(existingUser){
             if(existingUser.is_verified){
-                res.status(404).json({
+                return res.status(404).json({
                     status:"Failed",
                     message:"Already Verified Email!"
                 })
             }
         }
+
+        //If User not exist
+        if(!existingUser){
+            return res.status(404).json({
+                status:"Failed",
+                message:"User does not exist"
+            })
+        }
         
         //If OTP is not send for existing User then resend it
-        const emailVerification = await EmailVarificationModel.findOne({userId : existingUser._id, otp})
-        if(!emailVerification){
+        const emailverification = await EmailVerificationModel.findOne({userId : existingUser._id, otp})
+        if(!emailverification){
             if(!existingUser.is_verified){
-                sendEmailVarificationOTP(req, existingUser);
-                res.status(404).json({
+                sendEmailVerificationOTP(req, existingUser);
+                return res.status(404).json({
                     status:"Failed",
                     message:"Invalid OTP, New OTP send to your email"
                 })
             }
-            res.status(404).json({
+            return res.status(404).json({
                 staus:"Failed",
                 message:"Invalid OTP"
             })
         }
 
-       
-
         //OTP Expire
         const currentTime = new Date();
-        const expiredTime = new Date(emailVerification.createdAt.getTime() + 5 * 60 * 1000)
+        const expiredTime = new Date(emailverification.createdAt.getTime() + 5 * 60 * 1000)
         if(currentTime > expiredTime){
-            sendEmailVarificationOTP(res,existingUser);
-            res.status(404).json({
+            sendEmailVerificationOTP(res,existingUser);
+            return res.status(404).json({
                 status:"Failed",
                 message:"OTP expired, new OTP is send to your email"
             })
         }
 
-        //update is_Verified to true after varification
+        //update is_Verified to true after verification
         existingUser.is_verified = true;
         await existingUser.save();
 
-        await EmailVarificationModel.deleteMany({userId : existingUser._id})
-        res.status(500).json({
+        await EmailVerificationModel.deleteMany({userId : existingUser._id})
+        
+        await confirmEmailVerification(existingUser);
+
+        return res.status(500).json({
             staus:"Success",
             message:"Email Verified Successfully!"
         })
 
     } catch (error) {
-        res.status(500).json({
+        return res.status(500).json({
             status:"Failed",
             message:"Unable too verify your account, please try later"
         })
