@@ -3,6 +3,9 @@ import userModel from '../models/userModel.js'
 import EmailVerificationModel from '../models/emailVerificationModel.js';
 import sendEmailVerificationOTP from '../utils/sendEmailVerificationOTP.js'
 import confirmEmailVerification from '../utils/confirmEmailVerification.js';
+import generateTokens from '../utils/generateTokens.js';
+import setTokenCookies from '../utils/setTokensCookies.js'
+
 class UserController {
 
     // Registration
@@ -66,7 +69,7 @@ class UserController {
         const {email, otp } = req.body;
 
         if(!email || !otp){
-            return res.status(404).json({
+            return res.status(401).json({
                 status:"Failed",
                 message:"All fields are required"
             })
@@ -76,7 +79,7 @@ class UserController {
         const existingUser = await userModel.findOne({email});
         if(existingUser){
             if(existingUser.is_verified){
-                return res.status(404).json({
+                return res.status(401).json({
                     status:"Failed",
                     message:"Already Verified Email!"
                 })
@@ -85,7 +88,7 @@ class UserController {
 
         //If User not exist
         if(!existingUser){
-            return res.status(404).json({
+            return res.status(401).json({
                 status:"Failed",
                 message:"User does not exist"
             })
@@ -96,12 +99,12 @@ class UserController {
         if(!emailverification){
             if(!existingUser.is_verified){
                 sendEmailVerificationOTP(req, existingUser);
-                return res.status(404).json({
+                return res.status(401).json({
                     status:"Failed",
                     message:"Invalid OTP, New OTP send to your email"
                 })
             }
-            return res.status(404).json({
+            return res.status(401).json({
                 staus:"Failed",
                 message:"Invalid OTP"
             })
@@ -112,7 +115,7 @@ class UserController {
         const expiredTime = new Date(emailverification.createdAt.getTime() + 5 * 60 * 1000)
         if(currentTime > expiredTime){
             sendEmailVerificationOTP(res,existingUser);
-            return res.status(404).json({
+            return res.status(401).json({
                 status:"Failed",
                 message:"OTP expired, new OTP is send to your email"
             })
@@ -143,7 +146,7 @@ class UserController {
 
     const {email , password} = req.body;
     if(!email || !password){
-        return res.staus(404).json({
+        return res.status(401).json({
             status:"Failed",
             message:"All fields are required"
         })
@@ -151,15 +154,45 @@ class UserController {
 
     const user = await userModel.findOne({email})
     if(!user){
-        return res.status(404).json({
+        return res.status(401).json({
             status:"Failed",
             message:"Invalid username or password"
         })
     }
 
-    if(user){
-       
+    if(!user.is_verified){
+        return res.status(401).json({
+            status:"Failed",
+            message:"First verify your account"
+        })
     }
+
+    const matchPassword = await bcrypt.compare(password, user.password)
+    if(user){
+       if(!matchPassword){
+        return res.status(401).json({
+            status:"Failed",
+            message:"Invalid username or password"
+        })
+       }
+    }
+
+    //Generate tokens
+    const { accessToken, refreshToken, accessTokenExp, refreshTokenExp } = await generateTokens(user);
+
+    //Set cookies
+    setTokenCookies(res, accessToken, refreshToken, accessTokenExp, refreshTokenExp);
+
+    //Send success response with tokens
+    return res.status(201).json({
+        user:{userId:user._id, firstName:user.firstName, lastName:user.lastName, email:user.email, role:user.role},
+        status:"Success",
+        message:"Loged in Successfully!!!",
+        accessToken: accessToken,
+        refreshToken: refreshToken,
+        accessTokenExp: accessTokenExp,
+        is_auth:true
+    })
 
   }
 
