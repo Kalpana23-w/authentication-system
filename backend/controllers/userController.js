@@ -77,6 +77,16 @@ class UserController {
 
         //Check for existing user is already verified email
         const existingUser = await userModel.findOne({email});
+
+         //If User not exist
+         if(!existingUser){
+            return res.status(401).json({
+                status:"Failed",
+                message:"User does not exist"
+            })
+        }
+
+        //User exist but already verified
         if(existingUser){
             if(existingUser.is_verified){
                 return res.status(401).json({
@@ -84,14 +94,6 @@ class UserController {
                     message:"Already Verified Email!"
                 })
             }
-        }
-
-        //If User not exist
-        if(!existingUser){
-            return res.status(401).json({
-                status:"Failed",
-                message:"User does not exist"
-            })
         }
         
         //If OTP is not send for existing User then resend it
@@ -112,7 +114,7 @@ class UserController {
 
         //OTP Expire
         const currentTime = new Date();
-        const expiredTime = new Date(emailverification.createdAt.getTime() + 5 * 60 * 1000)
+        const expiredTime = new Date(emailverification.createdAt.getTime() + 10 * 60 * 1000)
         if(currentTime > expiredTime){
             sendEmailVerificationOTP(res,existingUser);
             return res.status(401).json({
