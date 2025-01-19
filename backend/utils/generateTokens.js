@@ -27,6 +27,7 @@ const generateTokens = async (user)=>{
         return Promise.resolve({
             accessToken, refreshToken, accessTokenExp, refreshTokenExp
         })
+        
     } catch (error) {
         return Promise.reject({error});
     }

@@ -7,4 +7,5 @@ const router = express.Router();
 router.post('/register', UserController.userRegistration);
 router.post('/verify-email', UserController.VerifyEmail);
 router.post('/login', UserController.userLogin);
+router.post('/refresh-token', UserController.getNewAccessToken);
 export default router;
