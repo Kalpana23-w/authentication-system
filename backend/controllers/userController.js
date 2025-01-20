@@ -6,6 +6,9 @@ import confirmEmailVerification from '../utils/confirmEmailVerification.js';
 import generateTokens from '../utils/generateTokens.js';
 import setTokenCookies from '../utils/setTokensCookies.js'
 import refreshAccessToken from '../utils/refreshAccessToken.js';
+import userRefreshTokensModel from '../models/userRefreshTokens.js';
+import jwt from 'jsonwebtoken'
+import transporter from '../config/emailConfig.js';
 
 class UserController {
 
@@ -204,6 +207,7 @@ class UserController {
         try {
             // Get new token
             const { newAccessToken, newRefreshToken, newAccessTokenExp, newRefreshTokenExp } = await refreshAccessToken(req, res);
+
             // Set new token to cookies
             setTokenCookies(res, newAccessToken, newRefreshToken, newAccessTokenExp, newRefreshTokenExp);
 
@@ -222,9 +226,176 @@ class UserController {
         }
     }
 
+    //Profile or Logged in user
+    static userProfile = async (req, res) => {
+
+        if (!req.user) {
+            return res.status(401).json({ message: 'Unauthorized' });
+        }
+        res.send({ "user": req.user });
+    }
+
     //Change Password
+    static changePassword = async (req, res) => {
 
+        const { password, password_confirmation } = req.body;
+        if (!password || !password_confirmation) {
+            return res.status(401).json({
+                status: "Failed",
+                message: "All fields are required"
+            })
+        }
 
+        if (password !== password_confirmation) {
+            return res.status(401).json({
+                status: "Failed",
+                message: "Confirmation password does not match"
+            })
+        }
+
+        //Update new password
+        const salt = await bcrypt.genSalt(Number(process.env.SALT));
+        const newHashPassword = await bcrypt.hash(password, salt);
+        await userModel.findByIdAndUpdate(req.user._id, { $set: { password: newHashPassword } });
+
+        res.status(200).json({
+            status: "Success",
+            message: "Password changed successfully!!!"
+        })
+
+    }
+
+    //password reset link via Email
+    static getPasswprdResetLink = async (req, res) => {
+        try {
+            const { email } = req.body;
+            if (!email){
+                return res.status(401).json({
+                    status: "Failed",
+                    message: "Please Provide Email"
+                })
+            }
+            const user = await userModel.findOne({ email })
+            if (!user){
+                return res.status(401).json({
+                    status: "Failed",
+                    message: "Invalid email, user does not exist"
+                })
+            }
+
+            const secreteKey = user._id + process.env.JWT_ACCESS_TOKEN_SECRET_KEY;
+            const token = jwt.sign({ userId: user._id }, secreteKey, { expiresIn: '15m' });
+
+            const resetLink = `${process.env.FRONTEND_HOST}/account/password-reset-link/${user._id}/${token}`
+
+            await transporter.sendMail({
+                from: process.env.GMAIL_EMAIL_FROM,
+                to: user.email,
+                subject: 'Password Reset Link',
+                html: ` <p>Dear ${user.firstName},</p>
+                <p>We have received a request to reset your password. To proceed with resetting your password, please click the link below:</p>
+                <p><a href=${resetLink}>Reset Your Password</a></p>
+                <p>Thank you</p>`
+            })
+
+            return res.status(200).json({
+                status: "Success",
+                message: "Password reset link send successfully"
+            })
+        } catch (error) {
+            res.status(500).json({
+                status: "Failed",
+                message: "Unable to send password reset link, please try later"
+            })
+        }
+    }
+
+    //Reset Password
+    static resetPassword = async (req, res) => {
+        try {
+            const { password, password_confirmation } = req.body;
+            const { id, token } = req.params;
+    
+            const user = await userModel.findById(id);
+            if (!user){
+                return res.status(401).json({
+                    status: "Failed",
+                    message: "User Not Found"
+                })
+            }
+            
+            const secreteKey = id + process.env.JWT_ACCESS_TOKEN_SECRET_KEY;
+
+            jwt.verify(token, secreteKey);
+
+            if (!password || !password_confirmation) {
+                return res.status(401).json({
+                    status: "Failed",
+                    message: "All fields are required"
+                })
+            }
+    
+            if (password !== password_confirmation) {
+                return res.status(401).json({
+                    status: "Failed",
+                    message: "Confirmation password does not match"
+                })
+            }
+    
+            //Update new password
+            const salt = await bcrypt.genSalt(Number(process.env.SALT));
+            const newHashPassword = await bcrypt.hash(password, salt);
+            await userModel.findByIdAndUpdate(id, { $set: { password: newHashPassword } });
+    
+            res.status(200).json({
+                status: "Success",
+                message: "Password reset successfully!!!"
+            })
+    
+        } catch (error) {
+            if(error.name === "TokenExpiredError"){
+                return res.status(400).json({
+                    status:"Failed",
+                    message:"Token expired, Please request a new password reset link"
+                })
+            }
+
+            return res.status(500).json({
+                status:"Failed",
+                message:"Unable to reset the password, Please try later"
+            })
+        }
+    }
+    //Logout
+    static userLogout = async (req, res) => {
+        try {
+            const refreshToken = req.cookies.refreshToken;
+            if (!refreshToken) {
+                return res.status(401).json({
+                    status: "Failed",
+                    message: "Token Expired"
+                })
+            }
+            await userRefreshTokensModel.findOneAndUpdate(
+                { token: refreshToken },
+                { $set: { blacklisted: true } }
+            );
+            res.clearCookie('accessToken');
+            res.clearCookie('refreshToken');
+            res.clearCookie('is_auth');
+
+            return res.status(200).json({
+                status: "Success",
+                message: "Logout Successfully!!!"
+            })
+
+        } catch (error) {
+            return res.status(500).json({
+                status: "Failed",
+                message: "Unable to logout, please try later"
+            })
+        }
+    }
 
 }
 

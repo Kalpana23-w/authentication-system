@@ -6,6 +6,7 @@ import cookieParser from 'cookie-parser';
 import passport from 'passport';
 import connectDB from './config/connectDatabase.js';
 import userRoutes from './routes/userRoutes.js'
+import passportConfig  from'./config/passport-jwt-strategy.js'
 
 const app = express();
 
@@ -18,16 +19,19 @@ const corsOptions = {
  optionSuccessStatus : 200
 }
 
-// Database connection
-connectDB(DATABASE_URL);
-
 const port = process.env.PORT ;
-
+ 
 // Middlewares
 app.use(express.json());
 app.use(cors(corsOptions));
 app.use(cookieParser());
 app.use(passport.initialize());
+
+// Initialize passport with the strategy
+passportConfig(passport);
+
+// Database connection
+connectDB(DATABASE_URL);
 
 // Load Routes
 app.use('/api/user', userRoutes);
